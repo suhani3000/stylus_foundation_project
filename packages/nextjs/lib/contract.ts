@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 
-const ERC20_ABI = [
+export const ERC20_ABI = [
   "function name() view returns (string)",
   "function symbol() view returns (string)",
   "function decimals() view returns (uint8)",
@@ -14,45 +14,17 @@ const ERC20_ABI = [
   "function burn(uint256 value)",
 ];
 
-export function getProvider() {
-  return new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL);
+const RPC_URL = "https://sepolia-rollup.arbitrum.io/rpc";
+
+/** Read-only contract — uses a static public RPC, no wallet needed */
+export function readContract(address: string) {
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
+  return new ethers.Contract(address, ERC20_ABI, provider);
 }
 
-export function getWallet() {
-  const provider = getProvider();
-  return new ethers.Wallet(process.env.NEXT_PUBLIC_PRIVATE_KEY!, provider);
-}
-
-export function getContract(address: string, signerOrProvider?: any) {
-  return new ethers.Contract(address, ERC20_ABI, signerOrProvider || getProvider());
-}
-
-export async function readBalance(contractAddress: string, walletAddress: string) {
-  const contract = getContract(contractAddress);
-  const raw = await contract.balanceOf(walletAddress);
-  return parseFloat(ethers.formatUnits(raw, 18));
-}
-
-export async function readTotalSupply(contractAddress: string) {
-  const contract = getContract(contractAddress);
-  const raw = await contract.totalSupply();
-  return parseFloat(ethers.formatUnits(raw, 18));
-}
-
-export async function sendTx(
-  contractAddress: string,
-  fnName: string,
-  args: any[],
-): Promise<{ hash: string; success: boolean; error?: string }> {
-  try {
-    const wallet = getWallet();
-    const contract = getContract(contractAddress, wallet);
-    const tx = await contract[fnName](...args);
-    await tx.wait();
-    return { hash: tx.hash, success: true };
-  } catch (e: any) {
-    return { hash: "", success: false, error: e.message };
-  }
+/** Write contract — requires a signer from the connected wallet */
+export function getContract(address: string, signer: ethers.Signer) {
+  return new ethers.Contract(address, ERC20_ABI, signer);
 }
 
 export type TxRecord = {

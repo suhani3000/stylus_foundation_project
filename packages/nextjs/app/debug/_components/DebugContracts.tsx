@@ -4,15 +4,42 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { IStylusToken } from "./IStylusToken";
 import { ethers } from "ethers";
+import { useWallet } from "~~/context/WalletContext";
 import { useGlobalState } from "~~/services/store/store";
 
-const contractAddress = "0x9039edd5b82599360c64b76fea7bf80b89208d1a"; // Get this from run-dev-node.sh output
-const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL || "");
-const privateKey = process.env.NEXT_PUBLIC_PRIVATE_KEY || "";
-const signer = new ethers.Wallet(privateKey, provider);
-const contract = new ethers.Contract(contractAddress, IStylusToken, signer);
+const contractAddress = "0x9039edd5b82599360c64b76fea7bf80b89208d1a";
+const RPC_URL = "https://sepolia-rollup.arbitrum.io/rpc";
+
+function getReadContract() {
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
+  return new ethers.Contract(contractAddress, IStylusToken, provider);
+}
+
+function getWriteContract(signer: ethers.Signer) {
+  return new ethers.Contract(contractAddress, IStylusToken, signer);
+}
+
+/**
+ * Fetch current fee data from the network and add a 50% buffer so that
+ * "max fee per gas less than block base fee" errors are avoided on Arbitrum Sepolia,
+ * where the baseFee can fluctuate quickly between estimation and submission.
+ */
+async function getGasOverrides(provider: ethers.Provider): Promise<ethers.Overrides> {
+  const feeData = await provider.getFeeData();
+  const baseFee = feeData.maxFeePerGas ?? BigInt(30_000_000); // 30 gwei fallback
+  const priorityFee = feeData.maxPriorityFeePerGas ?? BigInt(1_500_000);
+
+  // 2x buffer to ensure the transaction goes through on Arbitrum Sepolia
+  // Adding explicit gasLimit as well to ensure the overrides object is fully formed
+  return {
+    maxFeePerGas: baseFee * 2n,
+    maxPriorityFeePerGas: priorityFee * 2n,
+    gasLimit: 300000n,
+  };
+}
 
 export function DebugContracts() {
+  const { address, signer, provider, isConnected } = useWallet();
   const [balance, setBalance] = useState<string>("0");
   const [totalSupply, setTotalSupply] = useState<string>("0");
   const [decimals, setDecimals] = useState<number>(18);
@@ -35,23 +62,26 @@ export function DebugContracts() {
 
   const fetchContractInfo = async () => {
     try {
+      const contract = getReadContract();
       const name = await contract.name();
       const symbol = await contract.symbol();
-      const decimals = await contract.decimals();
-      const totalSupply = await contract.totalSupply();
+      const dec = await contract.decimals();
+      const supply = await contract.totalSupply();
       setTokenName(name);
       setTokenSymbol(symbol);
-      setDecimals(Number(decimals));
-      setTotalSupply(ethers.formatUnits(totalSupply, decimals));
+      setDecimals(Number(dec));
+      setTotalSupply(ethers.formatUnits(supply, dec));
     } catch (error) {
       console.error("Error fetching contract info:", error);
     }
   };
 
   const fetchBalance = async () => {
+    if (!address) return;
     try {
-      const balance = await contract.balanceOf(signer.address);
-      setBalance(ethers.formatUnits(balance, decimals));
+      const contract = getReadContract();
+      const bal = await contract.balanceOf(address);
+      setBalance(ethers.formatUnits(bal, decimals));
     } catch (error) {
       console.error("Error fetching balance:", error);
     }
@@ -59,9 +89,13 @@ export function DebugContracts() {
 
   useEffect(() => {
     fetchContractInfo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     fetchBalance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decimals]);
+  }, [address, decimals]);
 
   const handleTransaction = async (
     operation: () => Promise<any>,
@@ -69,9 +103,7 @@ export function DebugContracts() {
     successMessage: string,
     operationType: string,
   ) => {
-    // Don't proceed if another operation is pending
     if (txStatus.status === "pending") return;
-
     try {
       setTxStatus({ status: "pending", message: pendingMessage, operation: operationType });
       const tx = await operation();
@@ -92,104 +124,89 @@ export function DebugContracts() {
         updateTxStatus(tx.hash, "success", successMessage);
       }
       await fetchBalance();
+      await fetchContractInfo();
     } catch (error: any) {
       console.error("Transaction error:", error);
       setTxStatus({
         status: "error",
         message: error.reason || error.message || "Transaction failed",
       });
-      // If we threw after obtaining a tx object, try to update its status in history
-      // Best-effort: we don't have the hash if the send itself failed
     }
-    // Clear status after 5 seconds
     setTimeout(() => {
       setTxStatus({ status: "none", message: "" });
     }, 5000);
   };
 
-  const mintTokens = () => {
+  const mintTokens = async () => {
+    if (!signer || !provider) return;
     if (!mintAmount || isNaN(Number(mintAmount)) || Number(mintAmount) <= 0) {
-      setTxStatus({
-        status: "error",
-        message: "Please enter a valid mint amount",
-      });
+      setTxStatus({ status: "error", message: "Please enter a valid mint amount" });
       return;
     }
     const amount = ethers.parseUnits(mintAmount, decimals);
+    const overrides = await getGasOverrides(provider);
     handleTransaction(
-      () => contract.mint(amount),
+      () => getWriteContract(signer).mint(amount, overrides),
       "Minting tokens...",
       `${mintAmount} tokens minted successfully!`,
       "mint",
     );
   };
 
-  const mintToAddress = () => {
+  const mintToAddress = async () => {
+    if (!signer || !provider) return;
     if (!ethers.isAddress(recipientAddress)) {
-      setTxStatus({
-        status: "error",
-        message: "Please enter a valid Ethereum address",
-      });
+      setTxStatus({ status: "error", message: "Please enter a valid Ethereum address" });
       return;
     }
     if (!mintAmount || isNaN(Number(mintAmount)) || Number(mintAmount) <= 0) {
-      setTxStatus({
-        status: "error",
-        message: "Please enter a valid mint amount",
-      });
+      setTxStatus({ status: "error", message: "Please enter a valid mint amount" });
       return;
     }
     const amount = ethers.parseUnits(mintAmount, decimals);
+    const overrides = await getGasOverrides(provider);
     handleTransaction(
-      () => contract.mintTo(recipientAddress, amount),
+      () => getWriteContract(signer).mintTo(recipientAddress, amount, overrides),
       "Minting tokens to address...",
       `${mintAmount} tokens minted to ${recipientAddress} successfully!`,
       "mintTo",
     );
   };
 
-  const transferTokens = () => {
+  const transferTokens = async () => {
+    if (!signer || !provider) return;
     if (!ethers.isAddress(recipientAddress)) {
-      setTxStatus({
-        status: "error",
-        message: "Please enter a valid recipient address",
-      });
+      setTxStatus({ status: "error", message: "Please enter a valid recipient address" });
       return;
     }
     if (!transferAmount || isNaN(Number(transferAmount)) || Number(transferAmount) <= 0) {
-      setTxStatus({
-        status: "error",
-        message: "Please enter a valid transfer amount",
-      });
+      setTxStatus({ status: "error", message: "Please enter a valid transfer amount" });
       return;
     }
     const amount = ethers.parseUnits(transferAmount, decimals);
+    const overrides = await getGasOverrides(provider);
     handleTransaction(
-      () => contract.transfer(recipientAddress, amount),
+      () => getWriteContract(signer).transfer(recipientAddress, amount, overrides),
       "Transferring tokens...",
       `${transferAmount} tokens transferred to ${recipientAddress} successfully!`,
       "transfer",
     );
   };
 
-  const approveTokens = () => {
+  const approveTokens = async () => {
+    if (!signer || !provider) return;
     if (!ethers.isAddress(spenderAddress)) {
-      setTxStatus({
-        status: "error",
-        message: "Please enter a valid spender address",
-      });
+      setTxStatus({ status: "error", message: "Please enter a valid spender address" });
       return;
     }
     if (!approveAmount || isNaN(Number(approveAmount)) || Number(approveAmount) < 0) {
-      setTxStatus({
-        status: "error",
-        message: "Please enter a valid approve amount",
-      });
+      setTxStatus({ status: "error", message: "Please enter a valid approve amount" });
       return;
     }
     const amount = ethers.parseUnits(approveAmount, decimals);
+    const overrides = await getGasOverrides(provider);
     handleTransaction(
-      () => contract.approve(spenderAddress, amount),
+      () => getWriteContract(signer).approve(spenderAddress, amount, overrides),
       "Approving tokens...",
       `${approveAmount} tokens approved for ${spenderAddress} successfully!`,
       "approve",
@@ -197,18 +214,15 @@ export function DebugContracts() {
   };
 
   const checkAllowance = async () => {
-    if (txStatus.status === "pending") return;
-
+    if (txStatus.status === "pending" || !address) return;
     if (!ethers.isAddress(spenderAddress)) {
-      setTxStatus({
-        status: "error",
-        message: "Please enter a valid spender address",
-      });
+      setTxStatus({ status: "error", message: "Please enter a valid spender address" });
       return;
     }
     try {
       setTxStatus({ status: "pending", message: "Checking allowance...", operation: "checkAllowance" });
-      const allowanceAmount = await contract.allowance(signer.address, spenderAddress);
+      const contract = getReadContract();
+      const allowanceAmount = await contract.allowance(address, spenderAddress);
       setAllowance(ethers.formatUnits(allowanceAmount, decimals));
       setTxStatus({
         status: "success",
@@ -217,38 +231,47 @@ export function DebugContracts() {
     } catch (error: any) {
       console.error("Error checking allowance:", error);
       setAllowance("0");
-      setTxStatus({
-        status: "error",
-        message: "Error checking allowance",
-      });
+      setTxStatus({ status: "error", message: "Error checking allowance" });
     }
-    // Clear status after 5 seconds
     setTimeout(() => {
       setTxStatus({ status: "none", message: "" });
     }, 5000);
   };
 
-  const burnTokens = () => {
+  const burnTokens = async () => {
+    if (!signer || !provider) return;
     if (!burnAmount || isNaN(Number(burnAmount)) || Number(burnAmount) <= 0) {
-      setTxStatus({
-        status: "error",
-        message: "Please enter a valid burn amount",
-      });
+      setTxStatus({ status: "error", message: "Please enter a valid burn amount" });
       return;
     }
     const amount = ethers.parseUnits(burnAmount, decimals);
+    const overrides = await getGasOverrides(provider);
     handleTransaction(
-      () => contract.burn(amount),
+      () => getWriteContract(signer).burn(amount, overrides),
       "Burning tokens...",
       `${burnAmount} tokens burned successfully!`,
       "burn",
     );
   };
 
-  // Helper function to determine if a button should be disabled
   const isOperationDisabled = (operation: string) => {
     return txStatus.status === "pending" && (!txStatus.operation || txStatus.operation === operation);
   };
+
+  // --- Not connected state ---
+  if (!isConnected) {
+    return (
+      <div className="flex items-center justify-center w-full py-24">
+        <div className="bg-white dark:bg-gray-900/95 shadow-2xl rounded-3xl p-12 border border-slate-200 dark:border-blue-500/30 text-center max-w-sm">
+          <div className="text-5xl mb-4">🦊</div>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Wallet not connected</h2>
+          <p className="text-slate-500 dark:text-blue-200 mb-6">
+            Please connect your MetaMask wallet to interact with the ERC20 contract.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto py-8 px-4">
@@ -351,12 +374,11 @@ export function DebugContracts() {
                 disabled={txStatus.status === "pending"}
               />
               <button
-                className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold 
-                  ${
-                    isOperationDisabled("mint")
-                      ? "bg-slate-200 text-slate-400 dark:bg-cyan-900/50 dark:text-cyan-300/70 cursor-not-allowed"
-                      : "bg-cyan-500 hover:bg-cyan-600 dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white transform hover:scale-105 transition-all duration-300"
-                  }`}
+                className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold ${
+                  isOperationDisabled("mint")
+                    ? "bg-slate-200 text-slate-400 dark:bg-cyan-900/50 dark:text-cyan-300/70 cursor-not-allowed"
+                    : "bg-cyan-500 hover:bg-cyan-600 dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white transform hover:scale-105 transition-all duration-300"
+                }`}
                 onClick={mintTokens}
                 disabled={isOperationDisabled("mint")}
               >
@@ -383,6 +405,7 @@ export function DebugContracts() {
             </div>
           </div>
 
+          {/* Mint To Address Section */}
           <div className="bg-slate-50 dark:bg-gray-800/80 rounded-2xl p-6 border border-slate-200 dark:border-blue-500/20">
             <h2 className="text-xl font-semibold text-slate-700 dark:text-blue-200 mb-4">Mint to Specific Address</h2>
             <div className="flex flex-col gap-4">
@@ -405,12 +428,11 @@ export function DebugContracts() {
                 />
               </div>
               <button
-                className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold 
-                  ${
-                    isOperationDisabled("mintTo")
-                      ? "bg-slate-200 text-slate-400 dark:bg-green-900/50 dark:text-green-300/70 cursor-not-allowed"
-                      : "bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-500 text-white transform hover:scale-105 transition-all duration-300"
-                  }`}
+                className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold ${
+                  isOperationDisabled("mintTo")
+                    ? "bg-slate-200 text-slate-400 dark:bg-green-900/50 dark:text-green-300/70 cursor-not-allowed"
+                    : "bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-500 text-white transform hover:scale-105 transition-all duration-300"
+                }`}
                 onClick={mintToAddress}
                 disabled={isOperationDisabled("mintTo")}
               >
@@ -465,12 +487,11 @@ export function DebugContracts() {
                 />
               </div>
               <button
-                className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold 
-                  ${
-                    isOperationDisabled("transfer")
-                      ? "bg-slate-200 text-slate-400 dark:bg-blue-900/50 dark:text-blue-300/70 cursor-not-allowed"
-                      : "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 text-white transform hover:scale-105 transition-all duration-300"
-                  }`}
+                className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold ${
+                  isOperationDisabled("transfer")
+                    ? "bg-slate-200 text-slate-400 dark:bg-blue-900/50 dark:text-blue-300/70 cursor-not-allowed"
+                    : "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 text-white transform hover:scale-105 transition-all duration-300"
+                }`}
                 onClick={transferTokens}
                 disabled={isOperationDisabled("transfer")}
               >
@@ -526,12 +547,11 @@ export function DebugContracts() {
               </div>
               <div className="flex gap-3">
                 <button
-                  className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold 
-                    ${
-                      isOperationDisabled("approve")
-                        ? "bg-slate-200 text-slate-400 dark:bg-purple-900/50 dark:text-purple-300/70 cursor-not-allowed"
-                        : "bg-purple-500 hover:bg-purple-600 dark:bg-purple-600 dark:hover:bg-purple-500 text-white transform hover:scale-105 transition-all duration-300"
-                    }`}
+                  className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold ${
+                    isOperationDisabled("approve")
+                      ? "bg-slate-200 text-slate-400 dark:bg-purple-900/50 dark:text-purple-300/70 cursor-not-allowed"
+                      : "bg-purple-500 hover:bg-purple-600 dark:bg-purple-600 dark:hover:bg-purple-500 text-white transform hover:scale-105 transition-all duration-300"
+                  }`}
                   onClick={approveTokens}
                   disabled={isOperationDisabled("approve")}
                 >
@@ -561,12 +581,11 @@ export function DebugContracts() {
                   )}
                 </button>
                 <button
-                  className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold 
-                    ${
-                      isOperationDisabled("checkAllowance")
-                        ? "bg-slate-200 text-slate-400 dark:bg-indigo-900/50 dark:text-indigo-300/70 cursor-not-allowed"
-                        : "bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white transform hover:scale-105 transition-all duration-300"
-                    }`}
+                  className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold ${
+                    isOperationDisabled("checkAllowance")
+                      ? "bg-slate-200 text-slate-400 dark:bg-indigo-900/50 dark:text-indigo-300/70 cursor-not-allowed"
+                      : "bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white transform hover:scale-105 transition-all duration-300"
+                  }`}
                   onClick={checkAllowance}
                   disabled={isOperationDisabled("checkAllowance")}
                 >
@@ -637,12 +656,11 @@ export function DebugContracts() {
                 disabled={txStatus.status === "pending"}
               />
               <button
-                className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold 
-                  ${
-                    isOperationDisabled("burn")
-                      ? "bg-slate-200 text-slate-400 dark:bg-red-900/50 dark:text-red-300/70 cursor-not-allowed"
-                      : "bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 text-white transform hover:scale-105 transition-all duration-300"
-                  }`}
+                className={`btn border-0 shadow-lg px-6 rounded-xl font-semibold ${
+                  isOperationDisabled("burn")
+                    ? "bg-slate-200 text-slate-400 dark:bg-red-900/50 dark:text-red-300/70 cursor-not-allowed"
+                    : "bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 text-white transform hover:scale-105 transition-all duration-300"
+                }`}
                 onClick={burnTokens}
                 disabled={isOperationDisabled("burn")}
               >
@@ -674,6 +692,7 @@ export function DebugContracts() {
             </div>
           </div>
         </div>
+
         {/* CTA: View your transactions */}
         <div className="mt-10">
           <div className="bg-gradient-to-r from-blue-500/10 via-cyan-500/10 to-purple-500/10 dark:from-blue-900/20 dark:via-cyan-900/20 dark:to-purple-900/20 border border-slate-200 dark:border-blue-500/20 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">

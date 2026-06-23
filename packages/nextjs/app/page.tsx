@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import type { NextPage } from "next";
-import { useAccount } from "wagmi";
 import { BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { Address } from "~~/components/scaffold-eth";
+import { useWallet } from "~~/context/WalletContext";
 
 const Home: NextPage = () => {
-  const { address: connectedAddress } = useAccount();
+  const { address, isConnected, isConnecting, connectWallet } = useWallet();
 
   return (
     <>
@@ -17,10 +16,24 @@ const Home: NextPage = () => {
             <span className="block text-2xl mb-2">Welcome to</span>
             <span className="block text-4xl font-bold">ERC20 Token Stylus Contract</span>
           </h1>
-          <div className="flex justify-center items-center space-x-2 flex-col sm:flex-row">
-            <p className="my-2 font-medium">Connected Address:</p>
-            <Address address={connectedAddress} />
-          </div>
+
+          {!isConnected ? (
+            <div className="flex justify-center mt-8">
+              <button
+                id="home-connect-wallet-btn"
+                onClick={connectWallet}
+                disabled={isConnecting}
+                className="btn rounded-full bg-teal-500 hover:bg-teal-600 text-white border-0 px-8 py-3 text-lg font-semibold shadow-lg transition-all duration-200"
+              >
+                {isConnecting ? "Connecting..." : "Connect Wallet"}
+              </button>
+            </div>
+          ) : (
+            <div className="flex justify-center items-center space-x-2 flex-col sm:flex-row mt-4">
+              <p className="my-2 font-medium">Connected Address:</p>
+              <span className="font-mono text-sm bg-base-300 px-3 py-1 rounded-full">{address}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex-grow bg-base-300 w-full mt-16 px-8 py-12">

@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Address, createPublicClient, http, toHex } from "viem";
-import { hardhat } from "viem/chains";
+import { arbitrumSepolia } from "viem/chains";
 
 const publicClient = createPublicClient({
-  chain: hardhat,
-  transport: http(),
+  chain: arbitrumSepolia,
+  transport: http("https://sepolia-rollup.arbitrum.io/rpc"),
 });
 
 export const AddressStorageTab = ({ address }: { address: Address }) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { NextPage } from "next";
 import {
@@ -15,6 +15,13 @@ import { useGlobalState } from "~~/services/store/store";
 const BlockExplorer: NextPage = () => {
   const txHistory = useGlobalState(s => s.txHistory);
   const items = useMemo(() => txHistory, [txHistory]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   const EmptyState = () => (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">

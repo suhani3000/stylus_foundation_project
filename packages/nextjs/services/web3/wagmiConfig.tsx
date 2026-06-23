@@ -17,13 +17,15 @@ export const wagmiConfig = createConfig({
   connectors: wagmiConnectors,
   ssr: true,
   client({ chain }) {
-    let rpcFallbacks = [http()];
+    const ARBITRUM_SEPOLIA_RPC = "https://sepolia-rollup.arbitrum.io/rpc";
+    // Always provide an explicit RPC so prerender never fails
+    const explicitHttp = chain.id === 421614 ? http(ARBITRUM_SEPOLIA_RPC) : http();
+    let rpcFallbacks = [explicitHttp];
 
     const alchemyHttpUrl = getAlchemyHttpUrl(chain.id);
     if (alchemyHttpUrl) {
       const isUsingDefaultKey = scaffoldConfig.alchemyApiKey === DEFAULT_ALCHEMY_API_KEY;
-      // If using default Scaffold-ETH 2 API key, we prioritize the default RPC
-      rpcFallbacks = isUsingDefaultKey ? [http(), http(alchemyHttpUrl)] : [http(alchemyHttpUrl), http()];
+      rpcFallbacks = isUsingDefaultKey ? [explicitHttp, http(alchemyHttpUrl)] : [http(alchemyHttpUrl), explicitHttp];
     }
 
     return createClient({

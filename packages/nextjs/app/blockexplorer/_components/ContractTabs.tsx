@@ -7,7 +7,7 @@ import { AddressStorageTab } from "./AddressStorageTab";
 import { PaginationButton } from "./PaginationButton";
 import { TransactionsTable } from "./TransactionsTable";
 import { createPublicClient, http } from "viem";
-import { hardhat } from "viem/chains";
+import { arbitrumSepolia } from "viem/chains";
 import { useFetchBlocks } from "~~/hooks/scaffold-eth";
 
 type AddressCodeTabProps = {
@@ -21,8 +21,8 @@ type PageProps = {
 };
 
 const publicClient = createPublicClient({
-  chain: hardhat,
-  transport: http(),
+  chain: arbitrumSepolia,
+  transport: http("https://sepolia-rollup.arbitrum.io/rpc"),
 });
 
 export const ContractTabs = ({ address, contractData }: PageProps) => {

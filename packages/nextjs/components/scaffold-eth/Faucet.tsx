@@ -14,7 +14,7 @@ const FAUCET_ACCOUNT_INDEX = 0;
 
 const localWalletClient = createWalletClient({
   chain: hardhat,
-  transport: http(),
+  transport: http("http://localhost:8545"),
 });
 
 /**

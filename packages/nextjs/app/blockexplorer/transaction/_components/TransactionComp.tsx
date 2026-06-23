@@ -3,25 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Hash, Transaction, TransactionReceipt, createPublicClient, formatEther, formatUnits, http } from "viem";
+import { arbitrumSepolia } from "viem/chains";
 import { Address } from "~~/components/scaffold-eth";
 import { decodeTransactionData } from "~~/utils/scaffold-eth";
 
 const client = createPublicClient({
-  chain: {
-    id: 412346,
-    name: "Local Nitro",
-    network: "nitro-local",
-    nativeCurrency: {
-      decimals: 18,
-      name: "Ethereum",
-      symbol: "ETH",
-    },
-    rpcUrls: {
-      default: { http: [process.env.NEXT_PUBLIC_RPC_URL || ""] },
-      public: { http: [process.env.NEXT_PUBLIC_RPC_URL || ""] },
-    },
-  },
-  transport: http(),
+  chain: arbitrumSepolia,
+  transport: http("https://sepolia-rollup.arbitrum.io/rpc"),
 });
 
 const TransactionComp = ({ txHash }: { txHash: Hash }) => {

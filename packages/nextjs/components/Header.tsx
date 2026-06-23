@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bars3Icon, BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { FaucetButton, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
+import { useWallet } from "~~/context/WalletContext";
 import { useOutsideClick } from "~~/hooks/scaffold-eth";
 
 type HeaderMenuLink = {
@@ -15,25 +15,13 @@ type HeaderMenuLink = {
 };
 
 export const menuLinks: HeaderMenuLink[] = [
-  {
-    label: "Home",
-    href: "/",
-  },
-  {
-    label: "Debug Contracts",
-    href: "/debug",
-    icon: <BugAntIcon className="h-4 w-4" />,
-  },
-  {
-    label: "Block Explorer",
-    href: "/blockexplorer",
-    icon: <MagnifyingGlassIcon className="h-4 w-4" />,
-  },
+  { label: "Home", href: "/" },
+  { label: "Debug Contracts", href: "/debug", icon: <BugAntIcon className="h-4 w-4" /> },
+  { label: "Block Explorer", href: "/blockexplorer", icon: <MagnifyingGlassIcon className="h-4 w-4" /> },
 ];
 
 export const HeaderMenuLinks = () => {
   const pathname = usePathname();
-
   return (
     <>
       {menuLinks.map(({ label, href, icon }) => {
@@ -54,6 +42,41 @@ export const HeaderMenuLinks = () => {
         );
       })}
     </>
+  );
+};
+
+const WalletButton = () => {
+  const { address, balance, isConnected, isConnecting, connectWallet, disconnectWallet } = useWallet();
+
+  if (!isConnected) {
+    return (
+      <button
+        id="connect-wallet-btn"
+        onClick={connectWallet}
+        disabled={isConnecting}
+        className="btn btn-sm rounded-full bg-teal-500 hover:bg-teal-600 text-white border-0 px-5 font-semibold shadow transition-all duration-200"
+      >
+        {isConnecting ? "Connecting..." : "Connect Wallet"}
+      </button>
+    );
+  }
+
+  const short = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="hidden sm:flex flex-col items-end text-xs">
+        <span className="font-mono font-semibold">{short}</span>
+        <span className="text-slate-400">{balance} ETH</span>
+      </div>
+      <button
+        id="disconnect-wallet-btn"
+        onClick={disconnectWallet}
+        className="btn btn-sm rounded-full bg-red-500 hover:bg-red-600 text-white border-0 px-4 font-semibold shadow transition-all duration-200"
+      >
+        Disconnect
+      </button>
+    </div>
   );
 };
 
@@ -107,8 +130,7 @@ export const Header = () => {
         </ul>
       </div>
       <div className="navbar-end flex-grow mr-4">
-        <RainbowKitCustomConnectButton />
-        <FaucetButton />
+        <WalletButton />
       </div>
     </div>
   );

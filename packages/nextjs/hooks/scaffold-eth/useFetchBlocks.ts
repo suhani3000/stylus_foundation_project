@@ -1,22 +1,12 @@
 import { useEffect, useState } from "react";
 import { Block, Hash, TransactionReceipt, createPublicClient, http } from "viem";
+import { arbitrumSepolia } from "viem/chains";
+
+const ARBITRUM_SEPOLIA_RPC = "https://sepolia-rollup.arbitrum.io/rpc";
 
 const publicClient = createPublicClient({
-  chain: {
-    id: 412346,
-    name: "Local Nitro",
-    network: "nitro-local",
-    nativeCurrency: {
-      decimals: 18,
-      name: "Ethereum",
-      symbol: "ETH",
-    },
-    rpcUrls: {
-      default: { http: [process.env.NEXT_PUBLIC_RPC_URL || ""] },
-      public: { http: [process.env.NEXT_PUBLIC_RPC_URL || ""] },
-    },
-  },
-  transport: http(),
+  chain: arbitrumSepolia,
+  transport: http(ARBITRUM_SEPOLIA_RPC),
 });
 
 export const useFetchBlocks = () => {

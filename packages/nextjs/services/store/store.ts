@@ -48,10 +48,27 @@ export const useGlobalState = create<GlobalState>(set => ({
     set(state => ({ nativeCurrency: { ...state.nativeCurrency, isFetching: newValue } })),
   targetNetwork: scaffoldConfig.targetNetworks[0],
   setTargetNetwork: (newTargetNetwork: ChainWithAttributes) => set(() => ({ targetNetwork: newTargetNetwork })),
-  txHistory: [],
-  addTx: tx => set(state => ({ txHistory: [tx, ...state.txHistory] })),
+
+  txHistory:
+    typeof window !== "undefined" ? JSON.parse(window.localStorage.getItem("scaffold-eth-tx-history") || "[]") : [],
+
+  addTx: tx =>
+    set(state => {
+      const newHistory = [tx, ...state.txHistory];
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("scaffold-eth-tx-history", JSON.stringify(newHistory));
+      }
+      return { txHistory: newHistory };
+    }),
+
   updateTxStatus: (hash, status, message) =>
-    set(state => ({
-      txHistory: state.txHistory.map(t => (t.hash === hash ? { ...t, status, message: message ?? t.message } : t)),
-    })),
+    set(state => {
+      const newHistory = state.txHistory.map(t =>
+        t.hash === hash ? { ...t, status, message: message ?? t.message } : t,
+      );
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("scaffold-eth-tx-history", JSON.stringify(newHistory));
+      }
+      return { txHistory: newHistory };
+    }),
 }));
