@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { IStylusToken } from "./IStylusToken";
 import { ethers } from "ethers";
-import Link from "next/link";
 import { useGlobalState } from "~~/services/store/store";
 
-const contractAddress = "0x5af02ab1d47cc700c1ec4578618df15b8c9c565e"; // Get this from run-dev-node.sh output
+const contractAddress = "0x9039edd5b82599360c64b76fea7bf80b89208d1a"; // Get this from run-dev-node.sh output
 const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL || "");
 const privateKey = process.env.NEXT_PUBLIC_PRIVATE_KEY || "";
 const signer = new ethers.Wallet(privateKey, provider);
@@ -60,6 +60,7 @@ export function DebugContracts() {
   useEffect(() => {
     fetchContractInfo();
     fetchBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [decimals]);
 
   const handleTransaction = async (
@@ -75,7 +76,13 @@ export function DebugContracts() {
       setTxStatus({ status: "pending", message: pendingMessage, operation: operationType });
       const tx = await operation();
       if (tx?.hash) {
-        addTx({ hash: tx.hash, operation: operationType, message: pendingMessage, status: "pending", timestamp: Date.now() });
+        addTx({
+          hash: tx.hash,
+          operation: operationType,
+          message: pendingMessage,
+          status: "pending",
+          timestamp: Date.now(),
+        });
       }
       if (tx) {
         await tx.wait();
@@ -481,7 +488,12 @@ export function DebugContracts() {
                       viewBox="0 0 24 24"
                       stroke="currentColor"
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                      />
                     </svg>
                     Transfer Tokens
                   </div>
@@ -537,7 +549,12 @@ export function DebugContracts() {
                         viewBox="0 0 24 24"
                         stroke="currentColor"
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
                       </svg>
                       Approve
                     </div>
@@ -597,7 +614,8 @@ export function DebugContracts() {
                       />
                     </svg>
                     <span className="text-sm text-slate-600 dark:text-blue-200 break-all">
-                      Allowance for <span className="font-mono text-indigo-600 dark:text-blue-300">{spenderAddress}</span>:{" "}
+                      Allowance for{" "}
+                      <span className="font-mono text-indigo-600 dark:text-blue-300">{spenderAddress}</span>:{" "}
                       <span className="font-semibold text-slate-800 dark:text-white">{allowance}</span> tokens
                     </span>
                   </div>
@@ -661,14 +679,22 @@ export function DebugContracts() {
           <div className="bg-gradient-to-r from-blue-500/10 via-cyan-500/10 to-purple-500/10 dark:from-blue-900/20 dark:via-cyan-900/20 dark:to-purple-900/20 border border-slate-200 dark:border-blue-500/20 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
               <h3 className="text-xl font-semibold text-slate-800 dark:text-white">See your transaction history</h3>
-              <p className="text-slate-600 dark:text-blue-200/90">Open the Block Explorer tab to view all actions you performed here.</p>
+              <p className="text-slate-600 dark:text-blue-200/90">
+                Open the Block Explorer tab to view all actions you performed here.
+              </p>
             </div>
             <Link
               href="/blockexplorer"
               className="btn border-0 bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white rounded-xl shadow-lg px-6"
             >
               View on Block Explorer
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5 ml-2"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h6m0 0v6m0-6L10 16" />
               </svg>
             </Link>
@@ -678,4 +704,3 @@ export function DebugContracts() {
     </div>
   );
 }
-

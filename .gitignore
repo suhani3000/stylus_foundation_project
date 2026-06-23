@@ -25,4 +25,6 @@ dist
 
 packages/cargo-stylus/nft/.env
 packages/cargo-stylus/nft/target/
-packages/cargo-stylus/nft/build/
+packages/cargo-stylus/nft/build/.env
+packages/erc20/.env
+packages/nextjs/.env
